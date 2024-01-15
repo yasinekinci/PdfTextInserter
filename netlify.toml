@@ -2,3 +2,8 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+[build]
+  command = "dotnet publish -c Release -o release"
+  publish = "release/wwwroot"
+  environment = { DOTNET_VERSION = "6.0" }
