@@ -35,11 +35,6 @@ namespace Dynamic_Pdf_Editor.Server.Controllers
 			}
 
 			return document;
-		}
-
-		public IActionResult Index()
-		{
-			return Ok("Burda");
-		}
+		}		
 	}
 }
