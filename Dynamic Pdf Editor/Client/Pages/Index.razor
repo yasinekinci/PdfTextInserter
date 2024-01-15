@@ -1,0 +1,126 @@
+﻿@page "/"
+@using Dynamic_Pdf_Editor.Shared
+@using System.Text.Json;
+@inject HttpClient Http
+
+<PageTitle>Pdf Editor</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="pt-5">
+	<MudGrid>
+		<MudItem xs="3">
+			<MudGrid>
+				<MudItem xs="12">
+					<MudFileUpload @ref="mudFileUpload" T="IBrowserFile" Accept=".pdf" FilesChanged="UploadFiles" MaximumFileCount="100" Required="true">
+						<ButtonTemplate>
+							<MudButton HtmlTag="label" FullWidth=true
+									   Variant="Variant.Filled"
+									   Color="Color.Tertiary"
+									   StartIcon="@Icons.Material.Filled.CloudUpload"
+									   for="@context">
+								Pdf Upload
+							</MudButton>
+						</ButtonTemplate>
+						<SelectedTemplate>
+							@if (context != null)
+							{
+								<MudText Class="pt-4">@context.Name</MudText>
+							}
+							else
+							{
+								<MudText Class="pt-4">No Files</MudText>
+							}
+						</SelectedTemplate>
+					</MudFileUpload>
+					<MudDivider />
+				</MudItem>
+				<MudItem xs="12">
+					<MudSelect Disabled=@(PageCount == 0) Value="PageNumber" T="int" MultiSelection="false" SelectedValuesChanged="ChangePageNumber" Placeholder="Please Select Page Number" Label="Page Number" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+						@for (int i = 1; i <= PageCount; i++)
+						{
+							<MudSelectItem T="int" Value="@i" />
+						}
+					</MudSelect>
+				</MudItem>
+				<MudItem xs="12">
+					<MudNumericField Disabled=@(PageCount == 0) @bind-Value="XCoordinate" Label="X Coordinate" Variant="Variant.Outlined" />
+				</MudItem>
+				<MudItem xs="12">
+					<MudNumericField Disabled=@(PageCount == 0) @bind-Value="YCoordinate" Label="Y Coordinate" Variant="Variant.Outlined" />
+				</MudItem>
+				<MudItem xs="12">
+					<MudTextField Disabled=@(PageCount == 0) @bind-Value="TextValue" Label="Text Value" Variant="Variant.Outlined"></MudTextField>
+				</MudItem>
+				<MudItem xs="12">
+					<MudButton Disabled=@(PageCount == 0) Variant="Variant.Filled" Color="Color.Secondary" FullWidth OnClick="Generate">Generate</MudButton>
+					</MudItem>
+				</MudGrid>
+
+
+			</MudItem>
+			<MudItem xs="9">
+				<div id="pdfContainer" style="height:85vh;overflow:scroll;  border: 1px solid black;"></div>
+			</MudItem>
+		</MudGrid>
+	</MudContainer>
+
+	@code {
+	public int XCoordinate { get; set; }
+	public int YCoordinate { get; set; }
+	public string? TextValue { get; set; }
+	public byte[] PdfData { get; set; }
+	public int PageNumber { get; set; } = 1;
+	public int PageCount { get; set; }
+	MudForm uploadForm;
+	MudFileUpload<IBrowserFile> mudFileUpload;
+	[Inject]
+	IJSRuntime JSRuntime { get; set; }
+
+	DotNetObjectReference<Index> _componentReference => DotNetObjectReference.Create(this);
+
+	private async Task UploadFiles(IBrowserFile file)
+	{
+		using (var memoryStream = new MemoryStream())
+		{
+			using (var fileStream = file.OpenReadStream(5000 * 1024))
+			{
+				await fileStream.CopyToAsync(memoryStream);
+				PdfData = memoryStream.ToArray();
+				await JSRuntime.InvokeVoidAsync("MyJS.CacheMyComponent", _componentReference);
+				await JSRuntime.InvokeVoidAsync("MyJS.SetPageData", Convert.ToBase64String(PdfData));
+			}
+		}
+	}
+
+	[JSInvokable("GetPageCount")]
+	public void GetPageCount(int pageCount)
+	{
+		PageCount = pageCount;
+		StateHasChanged();
+	}
+
+	public async Task ChangePageNumber(IEnumerable<int> selectedPageNumbers)
+	{
+		PageNumber = selectedPageNumbers.First();
+		await JSRuntime.InvokeVoidAsync("MyJS.ShowPageByNumber", PageNumber);
+	}
+
+	public async Task Generate()
+	{
+		var document = new Document
+			{
+				Data = PdfData,
+				PageNumber = PageNumber,
+				TextValue = TextValue,
+				XCoordinate = XCoordinate,
+				YCoordinate = YCoordinate
+			};
+
+		var response = await Http.PostAsJsonAsync<Document>("Generater", document);
+
+		var content = await response.Content.ReadFromJsonAsync<Document>() ?? new Document();		
+		await JSRuntime.InvokeVoidAsync("MyJS.SetPageData", Convert.ToBase64String(content.Data));
+		await JSRuntime.InvokeVoidAsync("MyJS.ShowPageByNumber", PageNumber);
+
+	}
+
+}
